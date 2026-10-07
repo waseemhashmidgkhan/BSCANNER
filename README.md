@@ -1,10 +1,16 @@
-# Futures Signal Lab v1.1
+# Futures Signal Lab v1.2
 
 A Cloudflare Workers web app for researching 5-minute Binance futures trade setups. No exchange credentials, database, or paid market-data service are required. It does not place orders.
 
-## Updating from the HTTP 403 version
+## v1.2 — scan interruption handling
 
-Replace the existing project files in your GitHub repository with this folder's contents, preserving the current project root. Include the new `public/data.js` and `tests/data.test.js`; replace `public/app.js`, `public/index.html`, `public/style.css`, `src/worker.js`, `tests/engine.test.js`, `package.json`, and `package-lock.json`. Do not upload the ZIP itself or add an extra nested folder. Commit and allow Cloudflare to redeploy. Hard-refresh the site (Ctrl+Shift+R), verify the v1.1 header, leave **Market-data connection → Browser direct (default)** selected, and start scanning.
+An isolated network/timeout or server error now gets two retries (after 1.5 and 4 seconds), scheduled through the same shared request limiter. If it still fails, that contract is marked ERROR and scanning continues. Three consecutive contract failures pause the scan instead of issuing repeated failing requests. Explicit 403/451 access blocks and 418/429 rate limits still pause immediately, without retries or switching connections. A visible diagnostic line includes the market, symbol, and timeframe. The PROCESSED counter includes completed and failed analyses; the failures are counted separately. Browser DevTools request counters are not contract counts.
+
+This fixes overly aggressive stopping, but does not establish the underlying cause of a particular network failure. Live access from the user's connection remains to be verified.
+
+## Updating from an earlier version
+
+Replace the existing project files in your GitHub repository with this folder's contents, preserving the current project root. Include the new `public/data.js` and `tests/data.test.js`; replace `public/app.js`, `public/index.html`, `public/style.css`, `src/worker.js`, `tests/engine.test.js`, `package.json`, and `package-lock.json`. Do not upload the ZIP itself or add an extra nested folder. Commit and allow Cloudflare to redeploy. Hard-refresh the site (Ctrl+Shift+R), verify the v1.2 header, leave **Market-data connection → Browser direct (default)** selected, and start scanning.
 
 The default route now calls the official public Binance APIs directly from the visitor's browser. Cloudflare continues hosting the app, but does not forward market-data requests in this mode. The alternative Cloudflare server route is still selectable. There is no automatic route rotation after a block.
 
@@ -75,9 +81,9 @@ The suggested 40%/35%/25% TP exit split is a discretionary illustration. Display
 
 ## Scanning and operating limits
 
-This is a **single-user, browser-driven scanner**, not an unattended 24/7 backend. Keep the tab open and active; browsers can throttle background tabs. Three analysis lanes share a request scheduler (approximately 6.7 requests/second maximum). Closed higher-timeframe candles are reused locally until their next boundary; the Worker also caches upstream responses. The full universe is ordered by 24h dollar turnover, so the most liquid contracts appear first. Every contract is analyzed even if it fails the liquidity threshold.
+This is a **single-user, browser-driven scanner**, not an unattended 24/7 backend. Keep the tab open and active; browsers can throttle background tabs. Three analysis lanes share a request scheduler (approximately 5 requests/second maximum). Closed higher-timeframe candles are reused locally until their next boundary; the Worker also caches upstream responses. The full universe is ordered by 24h dollar turnover, so the most liquid contracts appear first. Every contract is analyzed even if it fails the liquidity threshold.
 
-The first full pass can exceed five minutes (800 contracts × six candle calls / 6.7 calls per second is approximately 12 minutes, before network latency). Subsequent passes reuse unchanged candles, but cannot promise every market will have a fresh analysis at every five-minute close. Results expire honestly; there is no fabricated coverage. After each pass the scanner waits for the next five-minute boundary, refreshes the universe/24h tickers, and starts another pass. Coverage is per pass. Each contract's six inputs are current as fetched, not one globally synchronized snapshot.
+The first full pass can exceed five minutes (800 contracts × six candle calls / 5 calls per second is approximately 16 minutes, before network latency). Subsequent passes reuse unchanged candles, but cannot promise every market will have a fresh analysis at every five-minute close. Results expire honestly; there is no fabricated coverage. After each pass the scanner waits for the next five-minute boundary, refreshes the universe/24h tickers, and starts another pass. Coverage is per pass. Each contract's six inputs are current as fetched, not one globally synchronized snapshot.
 
 Cloudflare and Binance quotas are shared by traffic and may change. The browser throttle is per tab, not a globally coordinated IP limiter. Use one scanning tab. Publishing to many simultaneous users requires a centralized scheduler and shared results. On Cloudflare Free, repeated scanning consumes dynamic Worker requests; a cold 800-contract pass uses about 4,800 candle requests. These dynamic Worker costs apply only to Cloudflare server mode. Browser-direct mode sends these requests straight to Binance; it still consumes Binance rate limits. The Worker cache reduces Binance calls in server mode, but does not remove Worker invocations. Do not assume uninterrupted 24/7 operation on a free quota.
 
