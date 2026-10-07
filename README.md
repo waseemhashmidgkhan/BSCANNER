@@ -1,6 +1,14 @@
-# Futures Signal Lab
+# Futures Signal Lab v1.1
 
 A Cloudflare Workers web app for researching 5-minute Binance futures trade setups. No exchange credentials, database, or paid market-data service are required. It does not place orders.
+
+## Updating from the HTTP 403 version
+
+Replace the existing project files in your GitHub repository with this folder's contents, preserving the current project root. Include the new `public/data.js` and `tests/data.test.js`; replace `public/app.js`, `public/index.html`, `public/style.css`, `src/worker.js`, `tests/engine.test.js`, `package.json`, and `package-lock.json`. Do not upload the ZIP itself or add an extra nested folder. Commit and allow Cloudflare to redeploy. Hard-refresh the site (Ctrl+Shift+R), verify the v1.1 header, leave **Market-data connection → Browser direct (default)** selected, and start scanning.
+
+The default route now calls the official public Binance APIs directly from the visitor's browser. Cloudflare continues hosting the app, but does not forward market-data requests in this mode. The alternative Cloudflare server route is still selectable. There is no automatic route rotation after a block.
+
+A 403 response indicates denied access; it does not conclusively identify a regional restriction. An IP/firewall rule can also cause it. A browser fetch may fail because of cross-origin (CORS) restrictions, the user's network, or a timeout. Both connection routes require permitted Binance access. No credentials are sent, and the app does not bypass access restrictions. A 418/429 pauses scanning and enforces at least a 60-second cooldown, honoring a longer Retry-After value. Live direct access must be confirmed from your deployed page; synthetic tests cannot verify your connection.
 
 ## Upload to GitHub and host on Cloudflare
 
@@ -71,7 +79,7 @@ This is a **single-user, browser-driven scanner**, not an unattended 24/7 backen
 
 The first full pass can exceed five minutes (800 contracts × six candle calls / 6.7 calls per second is approximately 12 minutes, before network latency). Subsequent passes reuse unchanged candles, but cannot promise every market will have a fresh analysis at every five-minute close. Results expire honestly; there is no fabricated coverage. After each pass the scanner waits for the next five-minute boundary, refreshes the universe/24h tickers, and starts another pass. Coverage is per pass. Each contract's six inputs are current as fetched, not one globally synchronized snapshot.
 
-Cloudflare and Binance quotas are shared by traffic and may change. The browser throttle is per tab, not a globally coordinated IP limiter. Use one scanning tab. Publishing to many simultaneous users requires a centralized scheduler and shared results. On Cloudflare Free, repeated scanning consumes dynamic Worker requests; a cold 800-contract pass uses about 4,800 candle requests. The Worker cache reduces Binance calls, but does not remove Worker invocations. Do not assume uninterrupted 24/7 operation on a free quota.
+Cloudflare and Binance quotas are shared by traffic and may change. The browser throttle is per tab, not a globally coordinated IP limiter. Use one scanning tab. Publishing to many simultaneous users requires a centralized scheduler and shared results. On Cloudflare Free, repeated scanning consumes dynamic Worker requests; a cold 800-contract pass uses about 4,800 candle requests. These dynamic Worker costs apply only to Cloudflare server mode. Browser-direct mode sends these requests straight to Binance; it still consumes Binance rate limits. The Worker cache reduces Binance calls in server mode, but does not remove Worker invocations. Do not assume uninterrupted 24/7 operation on a free quota.
 
 Binance may reject Cloudflare egress locations with 403/451 or rate-limit shared egress IPs with 418/429. The app pauses on these responses and displays the error; it does not rotate proxies or bypass regional restrictions. Validate live connectivity after deployment. If unavailable, a permitted data provider or backend location is required.
 
@@ -79,11 +87,12 @@ Binance may reject Cloudflare egress locations with 403/451 or rate-limit shared
 
 - `public/index.html`, `style.css`, `app.js`: responsive dashboard, scan scheduling and detail views.
 - `public/engine.js`: deterministic signal calculations using closed candles.
-- `src/worker.js`: constrained public Binance market-data proxy and caching.
+- `public/data.js`: browser/server data connection, closed-candle request construction, and error handling.
+- `src/worker.js`: optional constrained public Binance market-data proxy and caching.
 - `wrangler.jsonc`: Worker and static asset deployment configuration.
 - `tests/engine.test.js`: deterministic long/short plans, freshness, open-candle exclusion, cost/liquidity guards, and proxy validation/error behavior.
 
-Run `npm run check` and `npm test`. Tests use synthetic data; they verify implementation properties, not trading performance. Sample mode is visibly labeled and is never substituted for failed live market data.
+Run `npm run check` and `npm test`. The connection tests also cover direct endpoint selection, HTML error responses, network/CORS errors, and Retry-After handling. Tests use synthetic data; they verify implementation properties, not trading performance. Sample mode is visibly labeled and is never substituted for failed live market data.
 
 ## Official references
 
